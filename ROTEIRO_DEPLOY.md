@@ -1,8 +1,8 @@
-# Roteiro de Deploy — Django REST API no AWS Elastic Beanstalk + RDS MySQL
+# Roteiro de Deploy — Django REST API no AWS Elastic Beanstalk + RDS MySQL + S3
 
 **Disciplina:** Introdução ao Cloud Computing  
 **Ambiente:** Console AWS (upload via app.zip)  
-**Tempo estimado:** 40–60 minutos
+**Tempo estimado:** 50–70 minutos
 
 ---
 
@@ -14,14 +14,16 @@ Internet
    ▼
 [Elastic Beanstalk]  ←── app.zip (código Python/Django)
    │  (EC2 + Load Balancer gerenciados pela AWS)
-   │
-   ▼
-[RDS MySQL]          ←── banco de dados relacional gerenciado
+   │               │
+   ▼               ▼
+[RDS MySQL]     [S3 Bucket]
+banco de dados  imagens dos produtos
 ```
 
 **O que cada serviço faz:**
 - **Elastic Beanstalk (EB):** gerencia automaticamente a infraestrutura (EC2, balanceador, auto scaling). Você só sobe o código.
-- **RDS MySQL:** banco de dados gerenciado — sem instalar MySQL manualmente.
+- **RDS MySQL:** banco de dados relacional gerenciado — sem instalar MySQL manualmente.
+- **S3:** armazenamento de objetos — guarda as imagens dos produtos de forma durável e escalável.
 
 ---
 
@@ -48,6 +50,9 @@ apiawsEB/
 │   └── wsgi.py
 ├── api/
 │   ├── __init__.py
+│   ├── migrations/
+│   │   ├── 0001_initial.py
+│   │   └── 0002_produto_imagem.py
 │   ├── models.py
 │   ├── serializers.py
 │   ├── views.py
@@ -100,7 +105,7 @@ zip -r ../app.zip . -x "*.pyc" -x "__pycache__/*" -x "db.sqlite3"
 
 4. Deixe os demais campos no padrão e clique em **Criar banco de dados**
 
-> ⏳ A criação leva de 5 a 10 minutos. Continue para a Parte 2 enquanto aguarda.
+> ⏳ A criação leva de 5 a 10 minutos. Continue para a Parte 1.5 enquanto aguarda.
 
 ### 1.3 Anotar o Endpoint do RDS
 
@@ -108,6 +113,66 @@ Após o banco ficar com status **Disponível**:
 1. Clique no banco `db-produtos`
 2. Na seção **Conectividade e segurança**, copie o **Endpoint**
 3. Exemplo: `db-produtos.abc123xyz.us-east-1.rds.amazonaws.com`
+
+---
+
+## Parte 1.5 — Criar o Bucket S3 para Imagens
+
+### 1.5.1 Criar o bucket
+
+1. Na barra de busca, digite **S3** e clique em **Amazon S3**
+2. Clique em **Criar bucket**
+
+| Campo | Valor |
+|---|---|
+| Nome do bucket | `produtos-imagens-SEUNOME` (ex: `produtos-imagens-joao`) — deve ser **globalmente único** |
+| Região | `us-east-1` (a mesma do RDS e EB) |
+| Propriedade de objetos | `ACLs habilitadas` → selecione **Proprietário do bucket preferido** |
+| Bloquear todo o acesso público | **Desmarque** esta opção |
+| Confirmar desbloqueio | Marque a caixa de confirmação |
+
+3. Deixe os demais campos no padrão e clique em **Criar bucket**
+
+### 1.5.2 Configurar permissão de leitura pública
+
+1. Clique no bucket recém-criado
+2. Vá na aba **Permissões**
+3. Na seção **Política do bucket**, clique em **Editar** e cole o JSON abaixo  
+   (substitua `produtos-imagens-SEUNOME` pelo nome real do seu bucket):
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadImages",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::produtos-imagens-SEUNOME/*"
+        }
+    ]
+}
+```
+
+4. Clique em **Salvar alterações**
+
+### 1.5.3 Adicionar permissão S3 ao perfil do EB
+
+O Elastic Beanstalk roda em instâncias EC2 que usam uma **função IAM (role)** para acessar outros serviços da AWS. Precisamos dar acesso S3 a essa role.
+
+1. Na barra de busca, digite **IAM** e clique em **IAM**
+2. No menu lateral, clique em **Funções (Roles)**
+3. Pesquise por `aws-elasticbeanstalk-ec2-role` e clique nela
+4. Clique em **Adicionar permissões** → **Anexar políticas**
+5. Pesquise por `AmazonS3FullAccess`, marque a caixa e clique em **Adicionar permissões**
+
+> **Por que isso?** O código Django usa `boto3` para enviar arquivos ao S3. O boto3 dentro do EB usa automaticamente as credenciais da role EC2 — sem precisar de access keys no código.
+
+### 1.5.4 Anotar o nome do bucket
+
+Anote o nome do bucket criado:  
+**Bucket:** `produtos-imagens-SEUNOME`
 
 ---
 
@@ -176,6 +241,8 @@ Adicione as 6 variáveis abaixo (uma por vez, clicando no + a cada nova):
 | `RDS_DB_NAME` | `produtos_db` |
 | `RDS_USERNAME` | `admin` |
 | `RDS_PASSWORD` | `123456` |
+| `AWS_STORAGE_BUCKET_NAME` | ← nome do bucket (ex: `produtos-imagens-joao`) |
+| `AWS_S3_REGION_NAME` | `us-east-1` |
 | `DJANGO_DEBUG` | `False` |
 
 Depois de adicionar todas as variáveis, clique em **Próximo**.
@@ -226,7 +293,7 @@ Resposta esperada:
 GET http://<sua-url>/api/produtos/
 ```
 
-**Criar um produto:**
+**Criar um produto (sem imagem):**
 ```
 POST http://<sua-url>/api/produtos/
 Content-Type: application/json
@@ -236,6 +303,31 @@ Content-Type: application/json
     "descricao": "Notebook i7, 16GB RAM, 512GB SSD",
     "preco": "3999.90",
     "estoque": 10
+}
+```
+
+**Criar um produto COM imagem (via Postman/Insomnia):**
+```
+POST http://<sua-url>/api/produtos/
+Content-Type: multipart/form-data
+
+nome       = Notebook Dell
+descricao  = Notebook i7, 16GB RAM
+preco      = 3999.90
+estoque    = 10
+imagem     = [selecionar arquivo .jpg ou .png]
+```
+> No Postman: aba **Body** → selecione **form-data** → adicione os campos acima e no campo `imagem` mude o tipo para **File**.
+
+A resposta incluirá o campo `imagem` com a URL pública do S3:
+```json
+{
+    "id": 1,
+    "nome": "Notebook Dell",
+    "preco": "3999.90",
+    "estoque": 10,
+    "imagem": "https://produtos-imagens-joao.s3.amazonaws.com/produtos/notebook.jpg",
+    "criado_em": "2026-05-24T22:00:00Z"
 }
 ```
 
@@ -298,6 +390,9 @@ O bundle de logs padrão do EB **não inclui** os logs do gunicorn/Django. Para 
 | `ModuleNotFoundError` | Falta de dependência | Verifique o `requirements.txt` no zip |
 | `Invalid HTTP_HOST header` | `ALLOWED_HOSTS` muito restrito | Verifique se está `['*']` no settings.py |
 | HTTP 500 em `/api/` | collectstatic não rodou / staticfiles.json ausente | Re-faça o upload do `app.zip` para forçar novo deploy |
+| `An error occurred (AccessDenied) when calling PutObject` | Role do EB sem permissão S3 | Adicione `AmazonS3FullAccess` ao `aws-elasticbeanstalk-ec2-role` |
+| `NoSuchBucket` | Nome do bucket errado na variável | Verifique `AWS_STORAGE_BUCKET_NAME` no EB |
+| Imagem salva mas URL retorna `Access Denied` | Bucket sem leitura pública | Revise a política do bucket (JSON do Passo 1.5.2) e desabilite "Bloquear acesso público" |
 
 ### Liberar o Security Group do RDS
 
@@ -318,10 +413,10 @@ Se o EB não consegue acessar o RDS:
 |---|---|---|
 | GET | `/api/health/` | Verifica se a API está no ar |
 | GET | `/api/produtos/` | Lista todos os produtos |
-| POST | `/api/produtos/` | Cria um novo produto |
+| POST | `/api/produtos/` | Cria produto (JSON ou multipart com imagem) |
 | GET | `/api/produtos/{id}/` | Detalhe de um produto |
-| PUT | `/api/produtos/{id}/` | Atualiza um produto |
-| DELETE | `/api/produtos/{id}/` | Remove um produto |
+| PUT | `/api/produtos/{id}/` | Atualiza produto (pode incluir nova imagem) |
+| DELETE | `/api/produtos/{id}/` | Remove produto |
 
 ---
 
@@ -329,14 +424,19 @@ Se o EB não consegue acessar o RDS:
 
 - [ ] RDS criado com status **Disponível**
 - [ ] Endpoint do RDS anotado
-- [ ] `app.zip` gerado com `manage.py` na raiz
+- [ ] Bucket S3 criado com leitura pública habilitada
+- [ ] Política do bucket configurada (JSON colado e salvo)
+- [ ] `AmazonS3FullAccess` adicionada ao `aws-elasticbeanstalk-ec2-role`
+- [ ] `app.zip` gerado com `manage.py` na raiz (incluindo pasta `migrations/`)
 - [ ] Ambiente EB criado com plataforma **Python**
 - [ ] Upload do `app.zip` realizado
-- [ ] 6 variáveis de ambiente configuradas no EB
+- [ ] 8 variáveis de ambiente configuradas no EB (incluindo as do S3)
 - [ ] Status do ambiente EB: **Ok** (verde)
 - [ ] `GET /api/health/` retorna `{"status": "ok"}`
 - [ ] Conseguiu criar um produto via `POST /api/produtos/`
-- [ ] Produto aparece na listagem via `GET /api/produtos/`
+- [ ] Conseguiu criar um produto COM imagem via `POST` multipart
+- [ ] URL da imagem no JSON aponta para o S3 (`https://seu-bucket.s3.amazonaws.com/...`)
+- [ ] Imagem acessível pelo navegador via URL do S3
 
 ---
 
@@ -346,6 +446,7 @@ Se o EB não consegue acessar o RDS:
 
 1. **Elastic Beanstalk:** Ações → **Encerrar ambiente**
 2. **RDS:** Selecione o banco → **Ações** → **Excluir** (desmarque snapshot final para excluir mais rápido)
+3. **S3:** Selecione o bucket → **Esvaziar** (deletar todos os objetos) → depois **Excluir bucket**
 
 ---
 
