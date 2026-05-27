@@ -31,7 +31,7 @@ banco de dados  imagens dos produtos
 
 - Conta AWS Academy (ou conta própria) ativa
 - Acesso ao Console AWS: [https://console.aws.amazon.com](https://console.aws.amazon.com)
-- Arquivo `app.zip` gerado (instruções no **Passo 0**)
+- Arquivo `apps3.zip` gerado (instruções no **Passo 0**)
 
 ---
 
@@ -43,6 +43,10 @@ Selecione **todos os arquivos e pastas** dentro da pasta do projeto e compacte-o
 apiawsEB/
 ├── .ebextensions/
 │   └── django.config
+├── .platform/
+│   └── hooks/
+│       └── predeploy/
+│           └── 01_django_setup.sh   ← roda migrate + collectstatic no deploy
 ├── myproject/
 │   ├── __init__.py
 │   ├── settings.py
@@ -63,18 +67,18 @@ apiawsEB/
 ```
 
 > ⚠️ **Atenção:** o `manage.py` deve estar na **raiz** do zip, não dentro de uma subpasta.  
-> Selecione todos os arquivos dentro da pasta e use "Enviar para → Pasta compactada" (Windows) ou `zip -r app.zip .` (terminal).
+> Use **`git archive`** para gerar o zip — ele inclui apenas os arquivos rastreados pelo git, excluindo automaticamente `__pycache__`, `.venv` e `db.sqlite3`.
 
 ### Como zipar no Windows (PowerShell):
 ```powershell
 cd f:\IbmecRepos\26.1\All\apiawsEB
-Compress-Archive -Path * -DestinationPath ..\app.zip -Force
+git archive --format=zip HEAD -o apps3.zip
 ```
 
 ### Como zipar no Mac/Linux (Terminal):
 ```bash
 cd /caminho/para/apiawsEB
-zip -r ../app.zip . -x "*.pyc" -x "__pycache__/*" -x "db.sqlite3"
+git archive --format=zip HEAD -o apps3.zip
 ```
 
 ---
@@ -200,7 +204,7 @@ Anote o nome do bucket criado:
 
 **Upload do código:**
 1. Selecione **Arquivo local**
-2. Clique em **Escolher arquivo** e selecione o `app.zip`
+2. Clique em **Escolher arquivo** e selecione o `apps3.zip`
 3. Clique em **Próximo**
 
 ### 2.3 Configurar acesso ao serviço
@@ -262,7 +266,7 @@ Se precisar corrigir ou adicionar variáveis após a criação:
 2. No menu lateral esquerdo, clique em **Configuração**
 3. Procure a seção **Propriedades do ambiente** e clique em **Editar**
 4. Corrija os valores e clique em **Aplicar**
-5. Após aplicar → no painel do ambiente, clique em **Fazer upload e implantar** e suba o mesmo `app.zip` novamente para forçar a re-execução das migrações
+5. Após aplicar → no painel do ambiente, clique em **Fazer upload e implantar** e suba o mesmo `apps3.zip` novamente para forçar a re-execução das migrações
 
 > **Por que re-deploy?** O `migrate` só roda durante o deploy. Se você corrigiu as variáveis após o primeiro deploy, é necessário fazer um novo upload para o migrate rodar com as variáveis corretas.
 
@@ -427,7 +431,7 @@ Se o EB não consegue acessar o RDS:
 - [ ] Bucket S3 criado com leitura pública habilitada
 - [ ] Política do bucket configurada (JSON colado e salvo)
 - [ ] `AmazonS3FullAccess` adicionada ao `aws-elasticbeanstalk-ec2-role`
-- [ ] `app.zip` gerado com `manage.py` na raiz (incluindo pasta `migrations/`)
+- [ ] `apps3.zip` gerado com `manage.py` na raiz (incluindo pastas `migrations/` e `.platform/`)
 - [ ] Ambiente EB criado com plataforma **Python**
 - [ ] Upload do `app.zip` realizado
 - [ ] 8 variáveis de ambiente configuradas no EB (incluindo as do S3)
