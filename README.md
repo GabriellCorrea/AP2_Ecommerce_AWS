@@ -230,7 +230,7 @@ python manage.py createsuperuser
 
 **Etapa 1 — Preparação e revisão da AP1**
 
-Partimos do projeto funcional da AP1, garantindo que a aplicação rodava corretamente em ambiente local antes de iniciar qualquer alteração. Foi criada uma branch específica para a AP2 e revisados os modelos existentes (`Produto` e `Loja`).
+Partimos do projeto funcional da AP1, garantindo que a aplicação rodava corretamente em ambiente local antes de iniciar as alterações. Em seguida, foi criado um novo repositório para a AP2, permitindo organizar separadamente as evoluções do projeto. Também foram revisados os modelos existentes (Produto e Loja) antes da expansão para o cenário de e-commerce.
 
 **Etapa 2 — Evolução do modelo de dados (E-commerce)**
 
@@ -250,7 +250,7 @@ As variáveis de ambiente foram cadastradas no painel do EB. O hook de pré-depl
 
 **Etapa 6 — Validação fim a fim**
 
-Validamos todos os endpoints (GET, POST, PUT, DELETE), o upload de imagem de produto com persistência confirmada no S3, o acesso ao Django Admin com usuário `root` e a conectividade com o RDS.
+Validamos todos os endpoints (GET, POST, PUT, DELETE), o upload de imagem de produto com persistência confirmada no S3, o acesso ao Django Admin com usuário `admin` e a conectividade com o RDS.
 
 ---
 
