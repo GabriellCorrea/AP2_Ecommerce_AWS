@@ -23,15 +23,35 @@ class ProdutoViewSet(viewsets.ModelViewSet):
     """
     CRUD completo de Produtos.
 
-    - GET /api/produtos/ → lista todos 
-    - POST /api/produtos/ → cria novo 
-    - GET /api/produtos/{id}/ → detalhe 
-    - PUT /api/produtos/{id}/ → atualiza 
-    - DELETE /api/produtos/{id}/ → remove
-
+    - GET /api/produtos/                        → lista todos
+    - GET /api/produtos/?marca=Dell             → filtra por atributo JSON (marca)
+    - GET /api/produtos/?cor=preto              → filtra por atributo JSON (cor)
+    - GET /api/produtos/?marca=Dell&cor=preto   → filtro combinado relacional + JSON
+    - POST /api/produtos/                       → cria novo
+    - GET /api/produtos/{id}/                   → detalhe
+    - PUT /api/produtos/{id}/                   → atualiza
+    - DELETE /api/produtos/{id}/                → remove
     """
-    queryset = Produto.objects.all()
     serializer_class = ProdutoSerializer
+
+    # Atributos JSON aceitos como query params para filtro
+    ATRIBUTOS_FILTRO = ['marca', 'cor', 'ram_gb', 'tamanho', 'voltagem']
+
+    def get_queryset(self):
+        qs = Produto.objects.all()
+
+        # Filtros relacionais convencionais
+        loja_id = self.request.query_params.get('loja')
+        if loja_id:
+            qs = qs.filter(loja_id=loja_id)
+
+        # Filtros dentro do campo JSON atributos
+        for atributo in self.ATRIBUTOS_FILTRO:
+            valor = self.request.query_params.get(atributo)
+            if valor:
+                qs = qs.filter(**{f'atributos__{atributo}': valor})
+
+        return qs
 
 
 class LojaViewSet(viewsets.ModelViewSet):

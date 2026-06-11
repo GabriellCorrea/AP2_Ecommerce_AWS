@@ -58,9 +58,63 @@ API REST de e-commerce desenvolvida com Django REST Framework, evoluindo a AP1 p
 ## Modelos de Dados
 
 - **Loja** — nome, localização, bairro
-- **Produto** — nome, descrição, preço, estoque, imagem (armazenada no S3), loja (FK → Loja)
+- **Produto** — nome, descrição, preço, estoque, imagem (armazenada no S3), atributos (JSON), loja (FK → Loja)
 - **Pedido** — cliente, data de criação
 - **ItemPedido** — pedido (FK → Pedido), produto (FK → Produto), quantidade
+
+---
+
+## Campo JSON — Atributos Dinâmicos de Produto
+
+O modelo `Produto` possui um campo `atributos` (JSONField) para armazenar características variáveis que diferem por categoria — sem necessidade de criar colunas para cada especificação.
+
+### Exemplo de payload com atributos
+
+```json
+POST /api/produtos/
+{
+  "nome": "Notebook Dell Inspiron",
+  "preco": "3500.00",
+  "estoque": 5,
+  "atributos": {
+    "marca": "Dell",
+    "ram_gb": 16,
+    "cor": "preto",
+    "especificacoes": {
+      "cpu": "i7",
+      "armazenamento": "512GB SSD"
+    }
+  }
+}
+```
+
+### Filtros disponíveis via query params
+
+```bash
+# Filtro por marca (dentro do JSON)
+GET /api/produtos/?marca=Dell
+
+# Filtro por cor (dentro do JSON)
+GET /api/produtos/?cor=preto
+
+# Filtro combinado: relacional (loja) + JSON (marca)
+GET /api/produtos/?loja=1&marca=Dell
+
+# Outros atributos suportados: ram_gb, tamanho, voltagem
+GET /api/produtos/?ram_gb=16
+```
+
+### Quando usar campo relacional e quando usar JSONField
+
+| Situação | Use campo relacional | Use JSONField |
+|---|---|---|
+| Atributo presente em **todos** os produtos | ✅ (ex: `preco`, `estoque`) | ❌ |
+| Atributo que precisa de **FK ou integridade** | ✅ (ex: `loja_id`) | ❌ |
+| Atributos que **variam por categoria** | ❌ | ✅ (ex: `ram_gb` só faz sentido para eletrônicos) |
+| Estrutura **imprevisível ou extensível** | ❌ | ✅ (ex: especificações técnicas livres) |
+| Necessidade de **índice de alta performance** | ✅ | ⚠️ Possível, mas mais complexo |
+
+**Resumo:** use campo relacional para dados estruturados e obrigatórios; use JSONField para atributos opcionais, variáveis por tipo de produto, ou estruturas que ainda vão evoluir.
 
 ---
 
@@ -69,9 +123,27 @@ API REST de e-commerce desenvolvida com Django REST Framework, evoluindo a AP1 p
 ### Pré-requisitos
 
 - Python 3.11+
-- pip
+- Docker (para o banco MySQL local)
 
-### Passo a passo
+### Opção rápida — script de bootstrap
+
+**Windows:**
+```bat
+git clone <url-do-repositorio>
+cd AP2_Ecommerce_AWS
+setup.bat
+```
+
+**Linux/Mac:**
+```bash
+git clone <url-do-repositorio>
+cd AP2_Ecommerce_AWS
+bash setup.sh
+```
+
+O script cria o `venv`, instala dependências, sobe o MySQL via Docker, aplica migrations e orienta a criação do superusuário.
+
+### Passo a passo manual
 
 ```bash
 # 1. Clonar o repositório
@@ -80,30 +152,37 @@ cd AP2_Ecommerce_AWS
 
 # 2. Criar e ativar o ambiente virtual
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
+source venv/bin/activate        # Linux/Mac
+# venv\Scripts\activate         # Windows
 
 # 3. Instalar dependências
 pip install -r requirements.txt
 
-# 4. Aplicar migrações (usa SQLite localmente por padrão)
+# 4. Configurar variáveis de ambiente
+cp .env.example .env
+# Edite o .env se necessário (credenciais do banco local)
+
+# 5. Subir MySQL local via Docker
+docker run -d --name mysql-dev \
+  -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=ecommerce_dev \
+  -p 3306:3306 mysql:8
+
+# 6. Aplicar migrações
 python manage.py migrate
 
-# 5. Criar superusuário admin
+# 7. Criar superusuário admin
 python manage.py createsuperuser
 # Usuário sugerido: root
 
-# 6. Iniciar o servidor de desenvolvimento
+# 8. Iniciar o servidor de desenvolvimento
 python manage.py runserver
 ```
 
 - API disponível em: `http://localhost:8000/api/`
 - Django Admin em: `http://localhost:8000/admin/`
 
-> Localmente, o projeto usa SQLite e salva imagens na pasta `/media/`. As variáveis de ambiente do RDS e do S3 são opcionais — só são ativadas quando presentes.
+> Em desenvolvimento, o projeto usa MySQL local via Docker e salva imagens na pasta `/media/`. As variáveis de ambiente do RDS e do S3 são opcionais — só são ativadas quando presentes.
 
 ---
 
@@ -130,8 +209,8 @@ No console EB: **Configuração → Software → Propriedades do ambiente**
 
 | Variável | Descrição |
 |---|---|
+| `DJANGO_SETTINGS_MODULE` | **`myproject.settings.prod`** (obrigatório em produção) |
 | `DJANGO_SECRET_KEY` | Chave secreta do Django |
-| `DJANGO_DEBUG` | `False` em produção |
 | `RDS_HOSTNAME` | Endpoint do RDS |
 | `RDS_PORT` | Porta do banco (padrão `3306`) |
 | `RDS_DB_NAME` | Nome do banco |
@@ -191,10 +270,12 @@ python manage.py createsuperuser
 ## Boas Práticas de Configuração
 
 - Todas as credenciais são lidas via variáveis de ambiente — nenhum segredo no código-fonte.
-- `DEBUG=False` em produção via variável `DJANGO_DEBUG`.
+- `DEBUG=False` garantido em produção via `myproject/settings/prod.py`.
+- Settings separados por ambiente: `base.py` (comum), `dev.py` (local), `prod.py` (AWS).
 - Arquivos estáticos servidos pelo **WhiteNoise** (sem necessidade de S3).
 - Arquivos de mídia (imagens de produtos) armazenados e servidos diretamente pelo **S3**.
 - Hook de pré-deploy aplica migrações e coleta estáticos automaticamente a cada deploy.
+- Upload de imagem validado antes de chegar ao S3: tipos aceitos (JPEG, PNG, WebP) e limite de 5 MB.
 
 ---
 

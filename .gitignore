@@ -64,3 +64,6 @@ htmlcov/
 
 # Dependencies
 node_modules/
+
+# Build / deploy artifacts
+staticfiles/

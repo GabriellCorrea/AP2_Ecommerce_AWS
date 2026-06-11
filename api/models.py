@@ -26,6 +26,8 @@ class Produto(models.Model):
     preco = models.DecimalField(max_digits=10, decimal_places=2)
     estoque = models.PositiveIntegerField(default=0)
     imagem = models.ImageField(upload_to='produtos/', blank=True, null=True)
+    # Atributos variáveis do produto (ex: marca, cor, ram_gb, especificacoes)
+    atributos = models.JSONField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
