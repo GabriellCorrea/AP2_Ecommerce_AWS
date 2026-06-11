@@ -174,17 +174,17 @@ python manage.py createsuperuser
 
 ## Evidências
 
+### API em Produção
+![API Root](evidencias/api_root.png)
+
 ### RDS — Instância Ativa
-> _(Inserir print do console AWS RDS com a instância em execução)_
+![RDS Instância](evidencias/rds_instancia.png)
 
 ### S3 — Arquivos de Mídia
-> _(Inserir print do console AWS S3 com as imagens de produtos enviadas)_
-
-### API em Produção
-> _(Inserir print de requisição GET/POST de produto com imagem via Postman ou navegador)_
+![S3 Bucket](evidencias/s3_bucket.png)
 
 ### Django Admin
-> _(Inserir print do Django Admin logado com o usuário root)_
+![Django Admin](evidencias/django_admin.png)
 
 ---
 
